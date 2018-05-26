@@ -85,7 +85,7 @@ Headers:
 X-Namespace: <namespace>
 ```
 
-## Purge namespace O(n)
+## Purge all O(n)
 
 `POST /purge-all`
 
