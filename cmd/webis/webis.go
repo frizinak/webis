@@ -55,7 +55,7 @@ func main() {
 				}
 				runtime.GC()
 				runtime.ReadMemStats(&mem)
-				if mem.Alloc < softMaxMem { //uint64(float64(softMaxMem)*0.95) {
+				if mem.Alloc < softMaxMem {
 					if *verbose {
 						logger.Printf("OOM: seems we're ok: %d", mem.Alloc/1024)
 					}
@@ -82,7 +82,6 @@ func main() {
 					runtime.GC()
 				}
 
-				logger.Println("OOM: done")
 				return
 			}()
 
@@ -90,7 +89,7 @@ func main() {
 				purgeMem <- struct{}{}
 			}
 
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 10)
 		}
 	}()
 
