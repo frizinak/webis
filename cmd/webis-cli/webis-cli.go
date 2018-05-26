@@ -62,22 +62,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	var was int
-	for _, b := range []bool{*methodSet, *methodGet, *methodDel, *methodList} {
+	var was bool
+	for _, b := range []bool{
+		*methodSet,
+		*methodGet,
+		*methodDel,
+		*methodList,
+		*methodPurge,
+		*methodPurgeAll,
+	} {
 		if !b {
 			continue
 		}
-		if was != 0 {
+		if was {
 			fmt.Fprintln(os.Stderr, "Multiple methods selected")
 			os.Exit(1)
 		}
-		was++
-	}
-
-	if was == 0 {
-		fmt.Fprintln(os.Stderr, "No method selected")
-		flag.Usage()
-		os.Exit(1)
+		was = true
 	}
 
 	cli := cmd.NewCLI(*ns, ep.String())
@@ -101,5 +102,9 @@ func main() {
 		cmd.Print(cli.Purge())
 	case *methodPurgeAll:
 		cmd.Print(cli.PurgeAll())
+	default:
+		fmt.Fprintln(os.Stderr, "No method selected")
+		flag.Usage()
+		os.Exit(1)
 	}
 }
