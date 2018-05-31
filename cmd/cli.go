@@ -52,11 +52,13 @@ func (c *CLI) Get(key string, tags []string) (int, io.ReadCloser, error) {
 
 	res, err := c.c.Do(req)
 	code := 0
+	var body io.ReadCloser
 	if res != nil {
 		code = res.StatusCode
+		body = res.Body
 	}
 
-	return code, res.Body, err
+	return code, body, err
 }
 
 func (c *CLI) Del(key string, tags []string) (int, []byte, error) {
@@ -104,11 +106,13 @@ func (c *CLI) List(key string, tags []string) (int, io.ReadCloser, error) {
 
 	res, err := c.c.Do(req)
 	code := 0
+	var body io.ReadCloser
 	if res != nil {
 		code = res.StatusCode
+		body = res.Body
 	}
 
-	return code, res.Body, err
+	return code, body, err
 }
 
 func (c *CLI) do(req *http.Request) (int, []byte, error) {

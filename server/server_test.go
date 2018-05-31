@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/frizinak/webis/cache"
 )
@@ -13,7 +14,14 @@ import (
 func newServer() *Server {
 	cache := cache.New()
 	serverLogger := log.New(ioutil.Discard, "", 0)
-	return New(":8080", serverLogger, cache, 10*1024*1024)
+	return New(
+		":8080",
+		serverLogger,
+		cache,
+		10*1024*1024,
+		time.Second,
+		time.Second,
+	)
 }
 
 type responseWriter struct {

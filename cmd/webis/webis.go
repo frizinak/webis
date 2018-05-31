@@ -5,32 +5,45 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/frizinak/webis/cache"
+	"github.com/frizinak/webis/proc"
 	"github.com/frizinak/webis/server"
 )
 
 func main() {
 	addr := flag.String("u", "localhost:3200", "Interface:port to listen on")
-	hardMax := flag.Int64("hm", 512, "Hard memory limit in MiB")
-	softMax := flag.Int64("sm", 350, "Soft memory limit in MiB")
-	bodyMax := flag.Int64("b", 2048, "Post body size limit in KiB")
+	max := flag.Uint64("m", 512, "Memory limit in MiB")
+	bodyMax := flag.Int("b", 2048, "Post body size limit in KiB")
 	verbose := flag.Bool("v", false, "Verbose")
 	flag.Parse()
 
-	if *softMax > *hardMax {
-		*softMax = *hardMax
-	}
-
-	softMaxMem := uint64(*softMax * 1024 * 1024)
-	hardMaxMem := uint64(*hardMax * 1024 * 1024)
+	hardMaxMem := *max * 1024 * 1024
+	softMaxMem := uint64(0.95 * float64(hardMaxMem))
 
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 	cache := cache.New()
-	purgeMem := make(chan struct{}, 1)
+
+	debug.SetGCPercent(10)
+	p, err := proc.New(
+		os.Getpid(),
+		softMaxMem,
+		hardMaxMem,
+		func(pct float64, b uint64) bool {
+			clears := int(float64(cache.Len()) * (pct + 0.02))
+			logger.Printf(
+				"OOM: clearing %d random keys",
+				clears,
+			)
+			cache.DelRand(clears)
+			return true
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
 
 	go func() {
 		for {
@@ -41,67 +54,9 @@ func main() {
 	}()
 
 	go func() {
-		var mem runtime.MemStats
 		for {
-			runtime.ReadMemStats(&mem)
-			freeOS := func() (freeOS bool) {
-				if mem.Alloc < softMaxMem {
-					return
-				}
-
-				freeOS = mem.Alloc > hardMaxMem
-				if *verbose {
-					logger.Printf("OOM: looks like we're out of memory, forcing GC")
-				}
-				runtime.GC()
-				runtime.ReadMemStats(&mem)
-				if mem.Alloc < softMaxMem {
-					if *verbose {
-						logger.Printf("OOM: seems we're ok: %d", mem.Alloc/1024)
-					}
-					return
-				}
-
-				fmaxMem := float64(softMaxMem)
-				falloc := float64(mem.Alloc)
-				pct := (1 - fmaxMem/falloc) + 0.02
-				clears := int(float64(cache.Len()) * pct)
-				if clears == 0 {
-					clears = 1
-				}
-
-				logger.Printf(
-					"OOM: (%.0f > %.0f) clearing %d random keys",
-					falloc/1024,
-					fmaxMem/1024,
-					clears,
-				)
-
-				cache.DelRand(clears)
-				if !freeOS {
-					runtime.GC()
-				}
-
-				return
-			}()
-
-			if freeOS {
-				purgeMem <- struct{}{}
-			}
-
-			time.Sleep(time.Millisecond * 10)
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-purgeMem:
-				logger.Printf("OOM: Freeing OS memory")
-				debug.FreeOSMemory()
-			case <-time.After(time.Minute * 2):
-				debug.FreeOSMemory()
-			}
+			time.Sleep(time.Millisecond * 50)
+			p.Check()
 		}
 	}()
 
@@ -110,7 +65,15 @@ func main() {
 		serverLogger = logger
 	}
 
+	logger.Println("Starting")
 	logger.Fatal(
-		server.New(*addr, serverLogger, cache, *bodyMax*1024).Start(),
+		server.New(
+			*addr,
+			serverLogger,
+			cache,
+			*bodyMax*1024,
+			time.Second*5,
+			time.Second,
+		).Start(),
 	)
 }

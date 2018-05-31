@@ -7,12 +7,12 @@ CROSS_CLI := $(foreach os,$(CROSSOS),$(foreach arch,$(CROSSARCH),dist/webis-cli.
 .PHONY: reset test bench build cross cross-server cross-cli
 
 test:
-	go test \
-		$(shell find . -type f -name '*_test.go' -exec dirname {} \;)
+	go test -count=1 \
+		$(shell find . -maxdepth 3 -type f -name '*_test.go' -exec dirname {} \;)
 
 bench:
 	go test -test.benchmem -bench=. \
-		$(shell find . -type f -name '*_test.go' -exec dirname {} \;)
+		$(shell find . -maxdepth 3 -type f -name '*_test.go' -exec dirname {} \;)
 
 build: dist/webis dist/webis-cli
 

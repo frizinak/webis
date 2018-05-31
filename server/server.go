@@ -23,13 +23,14 @@ const (
 )
 
 var tooLarge = errors.New("Too large")
-var zero = string([]byte{0})
+var zeroRune rune = 0
+var zero = string([]byte{byte(zeroRune)})
 
 type Server struct {
 	s           *http.Server
 	c           *cache.Cache
 	l           *log.Logger
-	maxBodySize int64
+	maxBodySize int
 }
 
 func (s *Server) handleList(
@@ -253,9 +254,16 @@ func New(
 	addr string,
 	l *log.Logger,
 	c *cache.Cache,
-	maxBodySize int64,
+	maxBodySize int,
+	readTimeout,
+	readHeaderTimeout time.Duration,
 ) *Server {
-	s := &http.Server{Addr: addr}
+	s := &http.Server{
+		Addr:              addr,
+		MaxHeaderBytes:    1024 * 80,
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
 	server := &Server{s, c, l, maxBodySize}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", server.req)
@@ -265,15 +273,24 @@ func New(
 
 type limitReader struct {
 	reader io.Reader
-	max    int64
-	read   int64
+	max    int
+	read   int
+	n      bool
 }
 
 func (l *limitReader) Read(b []byte) (int, error) {
+	if l.n && len(b) > 0 {
+		return 0, tooLarge
+	}
+
+	if len(b)+l.read > l.max {
+		b = b[:l.max-l.read]
+	}
+
 	n, err := l.reader.Read(b)
-	l.read += int64(n)
-	if l.read > l.max {
-		return n, tooLarge
+	l.read += n
+	if l.read >= l.max {
+		l.n = true
 	}
 
 	return n, err
@@ -288,6 +305,13 @@ func tags(t []string) []cache.Tag {
 }
 
 func cleanDescriptor(i string) string {
+	for j, n := range i {
+		if n == zeroRune && len(i) > j+1 {
+			return i[j+1:]
+		}
+	}
+	return i
+
 	r := strings.SplitN(i, zero, 2)
 	if len(r) == 2 {
 		return r[1]
